@@ -1,0 +1,6 @@
+# built binary
+/ansforge
+/dist/
+
+# local audit log
+*.jsonl
