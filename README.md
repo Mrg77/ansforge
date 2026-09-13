@@ -41,6 +41,34 @@ production profile:
 
 None was detectable without executing. That is the thesis of this tool.
 
+## The family contract
+
+`tfforge`, `ansforge` and `ciforge` look at different things and behave the same
+way, so learning one means knowing the others:
+
+| Command | What it does | Costs tokens |
+|---|---|---|
+| `ansforge "<task>"` | the agent, on a task you describe | yes |
+| `ansforge scan` | gate one scope — same verdict every time | no |
+| `ansforge audit` | report the whole tree, report-only by default | no |
+| `ansforge fix` | repair findings, then re-check with the deterministic rules | yes |
+| `ansforge version` | | no |
+
+Shared flags on `scan`, `audit` and `fix`:
+
+| Flag | Effect |
+|---|---|
+| `--json` | machine-readable, so one report can aggregate all three tools |
+| `--html [--out FILE]` | a self-contained page: CSS-only tabs, no JavaScript, no external assets, light and dark |
+| `--explain` | one batched AI call adding prose and a real before/after per finding — **the only flag that costs tokens** |
+| `--fail-on <sev>` | `critical` \| `high` \| `medium` \| `low` \| `info` \| `none` |
+| `--top N` | show only the N worst problems |
+
+Why deterministic and agentic are separate commands rather than one clever
+entry point: a gate must return the same verdict on the same input, today and
+in a year. A model cannot promise that. So the free half decides, and the paid
+half advises.
+
 ## Install
 
 ```sh
@@ -63,21 +91,23 @@ git clone https://github.com/Mrg77/ansforge && cd ansforge && go build -o ansfor
 ## Use
 
 ```sh
-export ANTHROPIC_API_KEY=...     # console.anthropic.com, billed per token
+# free, deterministic — no API key needed
+ansforge scan .                          # the CI gate: exits 1 on a high finding
+ansforge audit .                         # report the tree, report-only
+ansforge audit . --html --out health.html
+ansforge audit . --json                  # for aggregation
 
+# costs tokens
+export ANTHROPIC_API_KEY=...
+ansforge audit . --explain               # adds prose + a real before/after per finding
+ansforge fix . --diff                    # repairs, then re-checks, and shows the diff
 ansforge "render roles/nginx templates with group_vars/all and fix what breaks"
-ansforge "add no_log to every task handling a credential in roles/grafana"
-ansforge "check whether site.yml is idempotent against the dev inventory"
 ```
 
-And a deterministic subcommand that needs no API key — suitable as a CI gate,
-because a gate must be reproducible:
-
-```sh
-ansforge scan .                      # exits 1 on a high finding
-ansforge scan roles/ --fail-on medium
-ansforge scan . --json
-```
+`fix` runs headless with a narrow toolset — read, write, re-scan. It cannot run a
+playbook: repairing code and changing a machine are different acts, and with no
+terminal a `confirm` decision fails closed. The re-check is the deterministic
+scanner, never the model's account of its own work.
 
 ## The tools
 
