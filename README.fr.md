@@ -44,6 +44,13 @@ Aucun n'était détectable sans exécuter. C'est la thèse de l'outil.
 ## Installer
 
 ```sh
+# Homebrew
+brew install mrg77/tap/ansforge
+
+# ou l'installeur (Linux, macOS)
+curl -fsSL https://raw.githubusercontent.com/Mrg77/ansforge/main/install.sh | sh
+
+# ou avec Go
 go install github.com/Mrg77/ansforge@latest
 ```
 

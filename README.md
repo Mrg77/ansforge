@@ -44,6 +44,13 @@ None was detectable without executing. That is the thesis of this tool.
 ## Install
 
 ```sh
+# Homebrew
+brew install mrg77/tap/ansforge
+
+# or the installer (Linux, macOS)
+curl -fsSL https://raw.githubusercontent.com/Mrg77/ansforge/main/install.sh | sh
+
+# or with Go
 go install github.com/Mrg77/ansforge@latest
 ```
 

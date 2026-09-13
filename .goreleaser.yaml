@@ -1,0 +1,64 @@
+# GoReleaser config for ansforge. Cuts cross-platform binaries + checksums on a
+# tag, and publishes a Homebrew formula to Mrg77/homebrew-tap.
+#
+# Release flow: bump → git tag vX.Y.Z → git push --tags → CI runs goreleaser.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ansforge
+    main: .
+    binary: ansforge
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: ansforge
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+# Homebrew (goreleaser v2: `brews` is deprecated → `homebrew_casks`), pushed to
+# the tap. `brew install mrg77/tap/ansforge`.
+homebrew_casks:
+  - name: ansforge
+    repository:
+      owner: Mrg77
+      name: homebrew-tap
+      # Push to the tap with a dedicated PAT (Contents:write on homebrew-tap),
+      # not the default GITHUB_TOKEN which is scoped to this repo only.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/Mrg77/ansforge"
+    description: "An AI agent that builds, validates and secures Ansible — by running it, not by reading it."
+    commit_author:
+      name: Mrg77
+      email: 52857557+Mrg77@users.noreply.github.com
+    # Clear the quarantine attribute so the unsigned binary runs without a
+    # Gatekeeper prompt on macOS.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ansforge"]
+          end
