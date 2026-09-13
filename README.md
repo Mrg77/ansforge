@@ -123,6 +123,27 @@ scanner, never the model's account of its own work.
 | `playbook_run` | **Gated** — changes real machines |
 | `idempotence_check` | **Gated** — plays twice, requires `changed=0` |
 
+## As an MCP server
+
+`ansforge mcp` serves the deterministic checks over the Model Context Protocol, so
+an assistant can call them directly instead of shelling out and parsing text.
+
+```json
+{
+  "mcpServers": {
+    "ansforge": { "command": "ansforge", "args": ["mcp"] }
+  }
+}
+```
+
+Exposed: `ansible_scan, ansible_audit` — read-only, free, and safe to call repeatedly.
+
+**Not exposed: `fix`, the agent, anything that writes.** An MCP server is driven
+by a model, usually without a human approving each call. Exposing a tool that
+edits files would hand an agent the capability the guards exist to withhold, and
+through a channel where the policy never runs. The server offers what changes
+nothing.
+
 ## The guard
 
 In Ansible the destructive act has no frightening name. There is no `destroy`

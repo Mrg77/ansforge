@@ -88,6 +88,7 @@ Usage:
   ansforge scan [path]       gate one scope — deterministic, no API key, exits 1 on a high finding
   ansforge audit [path]      report a whole tree — deterministic, report-only by default
   ansforge fix [path]        fix findings, then re-check (costs tokens)
+  ansforge mcp [path]        serve the read-only checks to an assistant (MCP, stdio)
   ansforge version
 
 Shared flags on scan/audit/fix:
@@ -125,6 +126,10 @@ Examples:
 		os.Exit(runAudit(os.Args[2:]))
 	case "fix":
 		os.Exit(runFix(os.Args[2:]))
+	case "mcp":
+		// Serve the read-only checks to an assistant over stdio. fix and the
+		// agent are deliberately absent: see internal/mcp.
+		os.Exit(runMCP(os.Args[2:]))
 	}
 
 	task := strings.Join(os.Args[1:], " ")
