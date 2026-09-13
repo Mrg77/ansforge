@@ -25,10 +25,18 @@ import (
 const (
 	defaultBaseURL = "https://api.anthropic.com/v1/messages"
 	apiVersion     = "2023-06-01"
-	// Default model: Sonnet 4.5 — a strong, cost-efficient choice for an agent
-	// that makes many tool-use round trips (you pay per token). Override with
-	// TFFORGE_MODEL, e.g. claude-opus-4-8 for the most capable reasoning.
-	defaultModel = "claude-sonnet-4-5"
+	// Default model. Sonnet is the right default for an AGENT: it makes many
+	// tool-use round trips and you pay for each one, so capability per token
+	// matters more than raw capability.
+	//
+	// The one-shot commands are the opposite trade. `--explain` and `fix` make a
+	// single call and produce code someone will apply, so the judgement is worth
+	// more than the saving — on a real report that call costs cents either way.
+	// Override per run:
+	//
+	//	ANSFORGE_MODEL=claude-opus-5 ansforge audit . --explain
+	//	ANSFORGE_MODEL=claude-haiku-4-5 ansforge "<cheap exploratory task>"
+	defaultModel = "claude-sonnet-5"
 )
 
 // Client talks to the Messages API. Zero value is not usable; use New.
@@ -63,7 +71,7 @@ func New() (*Client, error) {
 		return nil, fmt.Errorf("ANTHROPIC_API_KEY is not set — create one at https://console.anthropic.com (billed per token, separate from a Claude subscription)")
 	}
 	model := defaultModel
-	if m := os.Getenv("TFFORGE_MODEL"); m != "" {
+	if m := os.Getenv("ANSFORGE_MODEL"); m != "" {
 		model = m
 	}
 	return &Client{

@@ -203,8 +203,14 @@ with tokens priced per run:
 ```sh
 ANSFORGE_AUDIT=off ansforge "..."        # no file; the summary still prints
 ANSFORGE_MAX_COST=0.50 ansforge "..."    # stop before exceeding 0.50 USD
-ANSFORGE_MODEL=claude-haiku-4-5 ansforge "..."
+ANSFORGE_MODEL=claude-haiku-4-5 ansforge "..."     # cheaper agent loop
+ANSFORGE_MODEL=claude-opus-5 ansforge audit . --explain   # better one-shot judgement
 ```
+
+The default is `claude-sonnet-5`. The agent loop makes many tool round trips and
+pays for each, so capability per token is what matters there; `--explain` and
+`fix` make a single call and produce code someone will apply, so Opus is worth
+its price on exactly those.
 
 Reviewability and spend visibility are what make an agent deployable. A run whose
 cost you cannot see is a run you cannot budget.

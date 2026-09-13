@@ -31,9 +31,13 @@ type Pricing struct {
 // modelPricing holds rough public rates. Unknown models fall back to a
 // mid-range estimate so cost is never silently zero.
 var modelPricing = map[string]Pricing{
+	"claude-opus-5":    {InputPerM: 15, OutputPerM: 75},
+	"claude-sonnet-5":  {InputPerM: 3, OutputPerM: 15},
+	"claude-fable-5-1": {InputPerM: 3, OutputPerM: 15},
+	"claude-haiku-4-5": {InputPerM: 1, OutputPerM: 5},
+	// Previous generation, still selectable through <TOOL>_MODEL.
 	"claude-sonnet-4-5": {InputPerM: 3, OutputPerM: 15},
 	"claude-opus-4-8":   {InputPerM: 15, OutputPerM: 75},
-	"claude-haiku-4-5":  {InputPerM: 1, OutputPerM: 5},
 }
 
 func priceFor(model string) Pricing {

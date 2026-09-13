@@ -108,7 +108,14 @@ avec les tokens valorisés :
 ```sh
 ANSFORGE_AUDIT=off ansforge "..."        # pas de fichier ; le résumé s'affiche quand même
 ANSFORGE_MAX_COST=0.50 ansforge "..."    # s'arrête avant de dépasser 0,50 USD
+ANSFORGE_MODEL=claude-haiku-4-5 ansforge "..."            # boucle d'agent moins chère
+ANSFORGE_MODEL=claude-opus-5 ansforge audit . --explain   # meilleur jugement en one-shot
 ```
+
+Le défaut est `claude-sonnet-5`. La boucle d'agent fait beaucoup d'allers-retours
+d'outils et paie chacun, donc c'est la capacité par token qui compte ; `--explain`
+et `fix` ne font qu'un appel et produisent du code qu'un humain va appliquer, donc
+Opus vaut son prix sur exactement ces deux-là.
 
 Auditabilité et visibilité de la dépense : c'est ce qui rend un agent déployable.
 
