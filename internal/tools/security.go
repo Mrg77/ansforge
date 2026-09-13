@@ -8,23 +8,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/Mrg77/ansforge/internal/report"
 )
 
-// Finding is one security issue with enough context to act on it.
-type Finding struct {
-	Severity string `json:"severity,omitempty"` // high | medium | low
-	File     string `json:"file,omitempty"`
-	Line     int    `json:"line,omitempty"`
-	Rule     string `json:"rule,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Fix      string `json:"fix,omitempty"`
-	Job      string `json:"job,omitempty"`    // unused here; present so both tools share one renderer
-	Detail   string `json:"detail,omitempty"` // what exactly triggered it, shown next to the location
-}
+// Finding is an alias of the shared type, so every tool in the family speaks the
+// same shape — the aggregate report depends on it.
+type Finding = report.Finding
 
 // rule is a heuristic: a pattern, and what it means when it matches.
 type rule struct {
 	id       string
+	category string // security, style, reliability — becomes a tab in the HTML report
 	severity string
 	re       *regexp.Regexp
 	message  string
@@ -38,6 +33,7 @@ type rule struct {
 var rules = []rule{
 	{
 		id:       "plaintext-secret",
+		category: "security",
 		severity: "high",
 		re:       regexp.MustCompile(`(?i)^\s*(ansible_password|ansible_become_password|ansible_ssh_pass|.*_password|.*_secret|.*_token|.*_api_key)\s*:\s*["']?[^{\s"']{6,}`),
 		skip:     regexp.MustCompile(`(?i)\{\{|lookup\(|vault|!vault|_file\s*:|_path\s*:|CHANGEME|example|xxx`),
@@ -46,6 +42,7 @@ var rules = []rule{
 	},
 	{
 		id:       "no-log-missing",
+		category: "security",
 		severity: "medium",
 		re:       regexp.MustCompile(`(?i)(password|secret|token|api_key)\s*[:=]`),
 		skip:     regexp.MustCompile(`(?i)no_log|_file\s*:|_path\s*:|^\s*#`),
@@ -54,6 +51,7 @@ var rules = []rule{
 	},
 	{
 		id:       "validate-certs-off",
+		category: "security",
 		severity: "high",
 		re:       regexp.MustCompile(`(?i)validate_certs\s*:\s*(no|false)`),
 		message:  "TLS certificate validation is disabled — the connection is open to interception.",
@@ -61,6 +59,7 @@ var rules = []rule{
 	},
 	{
 		id:       "shell-interpolation",
+		category: "security",
 		severity: "high",
 		re:       regexp.MustCompile(`(?i)^\s*(ansible\.builtin\.)?(shell|command)\s*:.*\{\{`),
 		skip:     regexp.MustCompile(`\|\s*quote\s*\}\}`),
@@ -69,6 +68,7 @@ var rules = []rule{
 	},
 	{
 		id:       "become-everywhere",
+		category: "security",
 		severity: "low",
 		re:       regexp.MustCompile(`(?i)^\s*become\s*:\s*(yes|true)\s*$`),
 		message:  "Privilege escalation is enabled at play level — every task runs as root, including those that do not need it.",
@@ -76,6 +76,7 @@ var rules = []rule{
 	},
 	{
 		id:       "world-writable-mode",
+		category: "security",
 		severity: "medium",
 		// Only the LAST digit matters here: it is the "other" class. 0755 on a
 		// directory is correct and must not be reported — a scanner that cries
@@ -86,6 +87,7 @@ var rules = []rule{
 	},
 	{
 		id:       "host-key-checking-off",
+		category: "security",
 		severity: "medium",
 		re:       regexp.MustCompile(`(?i)host_key_checking\s*[:=]\s*(no|false)`),
 		message:  "SSH host key checking is disabled — the first connection to a spoofed host would succeed silently.",
@@ -149,18 +151,6 @@ func Scan(path string) ([]Finding, error) {
 	return findings, err
 }
 
-// MaxSeverity returns the worst severity present, or "" for none.
-func MaxSeverity(fs []Finding) string {
-	worst := ""
-	rank := map[string]int{"low": 1, "medium": 2, "high": 3}
-	for _, f := range fs {
-		if rank[f.Severity] > rank[worst] {
-			worst = f.Severity
-		}
-	}
-	return worst
-}
-
 func (SecurityScanTool) Run(_ context.Context, input json.RawMessage) (string, error) {
 	var in struct {
 		Path string `json:"path"`
@@ -197,7 +187,8 @@ func (SecurityScanTool) Run(_ context.Context, input json.RawMessage) (string, e
 		return "", err
 	}
 
-	return Render("security_scan", findings), nil
+	r := &report.Report{Tool: "ansforge", Subject: in.Path, Findings: findings}
+	return r.Text(0), nil
 }
 
 // getURLRe finds a get_url module call; the checksum lives in the task's block,
@@ -238,7 +229,8 @@ func scanGetURL(lines []string, rel string) []Finding {
 		}
 		if !found {
 			out = append(out, Finding{
-				Severity: "high", File: rel, Line: i + 1, Rule: "download-without-checksum",
+				Severity: report.High, Category: "security", File: rel, Line: i + 1,
+				Rule:    "download-without-checksum",
 				Message: "A file is downloaded with no checksum in the task — nothing verifies what arrived.",
 				Fix:     "Add `checksum: sha256:...` and bump it together with the version. Without it, a compromised upstream release becomes arbitrary code on your hosts.",
 			})
@@ -268,7 +260,8 @@ func scanFile(path, root string) []Finding {
 				continue
 			}
 			out = append(out, Finding{
-				Severity: r.severity, File: rel, Line: i + 1,
+				Severity: report.Severity(r.severity), Category: r.category,
+				File: rel, Line: i + 1,
 				Rule: r.id, Message: r.message, Fix: r.fix,
 			})
 		}

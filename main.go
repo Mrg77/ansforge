@@ -85,8 +85,17 @@ func main() {
 
 Usage:
   ansforge "<task>"          run the agent on a task
-  ansforge scan [path]       deterministic security scan (no LLM, no API key; exits 1 on high findings)
+  ansforge scan [path]       gate one scope — deterministic, no API key, exits 1 on a high finding
+  ansforge audit [path]      report a whole tree — deterministic, report-only by default
+  ansforge fix [path]        fix findings, then re-check (costs tokens)
   ansforge version
+
+Shared flags on scan/audit/fix:
+  --json                     machine-readable, for aggregation
+  --html [--out FILE]        self-contained HTML report (no JavaScript)
+  --explain                  add prose and a real before/after per finding (costs tokens)
+  --fail-on <severity>       critical | high | medium | low | info | none
+  --top N                    show only the N worst problems
 
 Environment:
   ANTHROPIC_API_KEY          required for agent runs
@@ -95,9 +104,11 @@ Environment:
   ANSFORGE_AUDIT             audit log path, or "off"
 
 Examples:
-  ansforge "render roles/nginx templates with group_vars/all and fix what breaks"
-  ansforge "scan this repo for hard-coded secrets and add no_log where it is missing"
-  ansforge scan .`)
+  ansforge scan .                       # the CI gate
+  ansforge audit . --html --out health.html
+  ansforge audit . --explain            # with before/after diffs
+  ansforge fix . --diff                 # repair, then re-check
+  ansforge "render roles/nginx templates with group_vars/all and fix what breaks"`)
 		os.Exit(2)
 	}
 
@@ -105,10 +116,15 @@ Examples:
 	case "version", "--version", "-v":
 		fmt.Println("ansforge", version)
 		return
+	// The family contract, identical in tfforge and ciforge: scan gates one
+	// scope, audit reports a tree, fix repairs and re-checks. The first two are
+	// deterministic and free; fix and the bare agent call a model.
 	case "scan":
-		// Deterministic subcommand: no LLM, no API key. Exits non-zero on high
-		// findings so it can gate a pipeline — a gate must be reproducible.
 		os.Exit(runScan(os.Args[2:]))
+	case "audit":
+		os.Exit(runAudit(os.Args[2:]))
+	case "fix":
+		os.Exit(runFix(os.Args[2:]))
 	}
 
 	task := strings.Join(os.Args[1:], " ")
