@@ -3,23 +3,23 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 )
 
 // Finding is one security issue with enough context to act on it.
 type Finding struct {
-	Severity string // high | medium | low
-	File     string
-	Line     int
-	Rule     string
-	Message  string
-	Fix      string
+	Severity string `json:"severity,omitempty"` // high | medium | low
+	File     string `json:"file,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	Rule     string `json:"rule,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Fix      string `json:"fix,omitempty"`
+	Job      string `json:"job,omitempty"`    // unused here; present so both tools share one renderer
+	Detail   string `json:"detail,omitempty"` // what exactly triggered it, shown next to the location
 }
 
 // rule is a heuristic: a pattern, and what it means when it matches.
@@ -117,6 +117,50 @@ func (SecurityScanTool) Schema() map[string]any {
 	}
 }
 
+// Scan runs the deterministic rules and returns the findings, so a caller can
+// decide an exit code on counts rather than by grepping rendered text.
+func Scan(path string) ([]Finding, error) {
+	if path == "" {
+		path = "."
+	}
+	root, err := confine(path)
+	if err != nil {
+		return nil, err
+	}
+	var findings []Finding
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "collections", ".cache", "node_modules", ".venv":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(p))
+		if ext != ".yml" && ext != ".yaml" && ext != ".cfg" {
+			return nil
+		}
+		findings = append(findings, scanFile(p, root)...)
+		return nil
+	})
+	return findings, err
+}
+
+// MaxSeverity returns the worst severity present, or "" for none.
+func MaxSeverity(fs []Finding) string {
+	worst := ""
+	rank := map[string]int{"low": 1, "medium": 2, "high": 3}
+	for _, f := range fs {
+		if rank[f.Severity] > rank[worst] {
+			worst = f.Severity
+		}
+	}
+	return worst
+}
+
 func (SecurityScanTool) Run(_ context.Context, input json.RawMessage) (string, error) {
 	var in struct {
 		Path string `json:"path"`
@@ -153,30 +197,7 @@ func (SecurityScanTool) Run(_ context.Context, input json.RawMessage) (string, e
 		return "", err
 	}
 
-	if len(findings) == 0 {
-		return "security_scan: no findings. (Heuristics complement ansible-lint; a clean scan is not a proof of safety.)", nil
-	}
-
-	order := map[string]int{"high": 0, "medium": 1, "low": 2}
-	sort.SliceStable(findings, func(i, j int) bool {
-		if order[findings[i].Severity] != order[findings[j].Severity] {
-			return order[findings[i].Severity] < order[findings[j].Severity]
-		}
-		return findings[i].File < findings[j].File
-	})
-
-	var b strings.Builder
-	counts := map[string]int{}
-	for _, f := range findings {
-		counts[f.Severity]++
-	}
-	fmt.Fprintf(&b, "security_scan: %d finding(s) — %d high, %d medium, %d low\n\n",
-		len(findings), counts["high"], counts["medium"], counts["low"])
-	for _, f := range findings {
-		fmt.Fprintf(&b, "[%s] %s:%d  (%s)\n  %s\n  fix: %s\n\n",
-			strings.ToUpper(f.Severity), f.File, f.Line, f.Rule, f.Message, f.Fix)
-	}
-	return truncate(b.String(), 12000), nil
+	return Render("security_scan", findings), nil
 }
 
 // getURLRe finds a get_url module call; the checksum lives in the task's block,

@@ -30,7 +30,7 @@ func TestDetectsPlaintextSecret(t *testing.T) {
 	if !strings.Contains(out, "plaintext-secret") {
 		t.Fatalf("a hard-coded password must be reported, got:\n%s", out)
 	}
-	if !strings.Contains(out, "[HIGH]") {
+	if !strings.Contains(out, "HIGH") {
 		t.Fatal("a hard-coded credential is a high finding")
 	}
 }

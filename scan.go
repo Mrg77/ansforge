@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -27,7 +26,18 @@ Usage:
 Flags:`)
 		fs.PrintDefaults()
 	}
-	_ = fs.Parse(args)
+	// Go's flag package stops at the first positional argument, so
+	// `scan . --json` would silently ignore the flag. Reorder so both spellings
+	// work: a CLI that quietly does the wrong thing is worse than one that errors.
+	var positional, flags []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			flags = append(flags, a)
+		} else {
+			positional = append(positional, a)
+		}
+	}
+	_ = fs.Parse(append(flags, positional...))
 
 	path := "."
 	if fs.NArg() > 0 {
@@ -36,41 +46,38 @@ Flags:`)
 	wd, _ := os.Getwd()
 	tools.SetProjectRoot(wd)
 
-	in, _ := json.Marshal(map[string]string{"path": path})
-	out, err := tools.SecurityScanTool{}.Run(context.Background(), in)
+	findings, err := tools.Scan(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ansforge scan:", err)
 		return 2
 	}
 
 	if *asJSON {
-		fmt.Println(string(mustJSON(out)))
+		out, _ := json.MarshalIndent(map[string]any{
+			"tool":         "ansforge",
+			"findings":     findings,
+			"count":        len(findings),
+			"max_severity": tools.MaxSeverity(findings),
+		}, "", "  ")
+		fmt.Println(string(out))
 	} else {
-		fmt.Println(out)
+		fmt.Print(tools.Render("security_scan", findings))
 	}
 
-	switch strings.ToLower(*failOn) {
-	case "none":
+	// Decide on counts, never by grepping rendered text: the report is coloured,
+	// and a gate must not depend on how something is displayed.
+	rank := map[string]int{"low": 1, "medium": 2, "high": 3}
+	if strings.EqualFold(*failOn, "none") {
 		return 0
-	case "low":
-		if strings.Contains(out, "[LOW]") || strings.Contains(out, "[MEDIUM]") || strings.Contains(out, "[HIGH]") {
-			return 1
-		}
-	case "medium":
-		if strings.Contains(out, "[MEDIUM]") || strings.Contains(out, "[HIGH]") {
-			return 1
-		}
-	default: // high
-		if strings.Contains(out, "[HIGH]") {
+	}
+	threshold := rank[strings.ToLower(*failOn)]
+	if threshold == 0 {
+		threshold = rank["high"]
+	}
+	for _, f := range findings {
+		if rank[f.Severity] >= threshold {
 			return 1
 		}
 	}
 	return 0
-}
-
-// mustJSON wraps the human report so `--json` stays machine-readable without a
-// second scanning pass.
-func mustJSON(report string) []byte {
-	b, _ := json.MarshalIndent(map[string]string{"report": report}, "", "  ")
-	return b
 }
