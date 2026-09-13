@@ -60,13 +60,6 @@ var rules = []rule{
 		fix:      "Remove validate_certs, or point ca_path at the internal CA bundle if the certificate is private.",
 	},
 	{
-		id:       "download-without-checksum",
-		severity: "high",
-		re:       regexp.MustCompile(`(?i)^\s*(ansible\.builtin\.)?get_url\s*:`),
-		message:  "A file is downloaded without a pinned checksum (checked at the task level).",
-		fix:      "Add `checksum: sha256:...` and bump it together with the version. Without it, a compromised upstream release becomes arbitrary code on your hosts.",
-	},
-	{
 		id:       "shell-interpolation",
 		severity: "high",
 		re:       regexp.MustCompile(`(?i)^\s*(ansible\.builtin\.)?(shell|command)\s*:.*\{\{`),
@@ -186,14 +179,62 @@ func (SecurityScanTool) Run(_ context.Context, input json.RawMessage) (string, e
 	return truncate(b.String(), 12000), nil
 }
 
+// getURLRe finds a get_url module call; the checksum lives in the task's block,
+// on a later line, so this one needs more than a line-at-a-time match.
+var getURLRe = regexp.MustCompile(`(?i)^(\s*)(-\s*)?(ansible\.builtin\.)?get_url\s*:`)
+
+// checksumRe matches the checksum key anywhere in that block.
+var checksumRe = regexp.MustCompile(`(?i)^\s*checksum\s*:`)
+
+// scanGetURL reports a get_url whose task block carries no checksum.
+//
+// A line-at-a-time rule flagged every get_url, including the correct ones — and a
+// scanner that reports correct code is a scanner people learn to ignore. So the
+// block is read: from the get_url line to the first line indented no deeper than
+// it, looking for `checksum:`.
+func scanGetURL(lines []string, rel string) []Finding {
+	var out []Finding
+	for i, line := range lines {
+		m := getURLRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		indent := len(m[1])
+		found := false
+		for j := i + 1; j < len(lines); j++ {
+			next := lines[j]
+			if strings.TrimSpace(next) == "" {
+				continue
+			}
+			// Dedent to the module's level or above ends the block.
+			if len(next)-len(strings.TrimLeft(next, " ")) <= indent {
+				break
+			}
+			if checksumRe.MatchString(next) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			out = append(out, Finding{
+				Severity: "high", File: rel, Line: i + 1, Rule: "download-without-checksum",
+				Message: "A file is downloaded with no checksum in the task — nothing verifies what arrived.",
+				Fix:     "Add `checksum: sha256:...` and bump it together with the version. Without it, a compromised upstream release becomes arbitrary code on your hosts.",
+			})
+		}
+	}
+	return out
+}
+
 func scanFile(path, root string) []Finding {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
 	rel, _ := filepath.Rel(root, path)
-	var out []Finding
-	for i, line := range strings.Split(string(b), "\n") {
+	lines := strings.Split(string(b), "\n")
+	out := scanGetURL(lines, rel)
+	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
 			continue

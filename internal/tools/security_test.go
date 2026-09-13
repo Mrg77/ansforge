@@ -105,3 +105,57 @@ func TestConfineRejectsTraversal(t *testing.T) {
 		t.Fatalf("a path inside the project must be accepted: %v", err)
 	}
 }
+
+// A get_url whose task block carries a checksum is CORRECT and must not be
+// reported. The first version of this rule matched the get_url line alone and
+// flagged every download, including the verified ones — a scanner that reports
+// correct code teaches people to ignore it.
+func TestGetURLWithChecksumIsAccepted(t *testing.T) {
+	out := scan(t, "main.yml", `---
+- name: Download the release tarball (checksum-verified)
+  ansible.builtin.get_url:
+    url: "{{ node_exporter_url }}"
+    dest: /tmp/node_exporter.tgz
+    checksum: "sha256:{{ node_exporter_sha256 }}"
+    mode: "0644"
+`)
+	if strings.Contains(out, "download-without-checksum") {
+		t.Fatalf("a get_url with a checksum must not be reported, got:\n%s", out)
+	}
+}
+
+func TestGetURLWithoutChecksumIsReported(t *testing.T) {
+	out := scan(t, "main.yml", `---
+- name: Fetch something
+  ansible.builtin.get_url:
+    url: https://example.com/bin.tgz
+    dest: /tmp/bin.tgz
+    mode: "0644"
+`)
+	if !strings.Contains(out, "download-without-checksum") {
+		t.Fatalf("a get_url without a checksum must be reported, got:\n%s", out)
+	}
+}
+
+// The checksum of one task must not excuse the next task's missing one: the
+// block ends where the indentation returns to the module's level.
+func TestChecksumDoesNotLeakToNextTask(t *testing.T) {
+	out := scan(t, "main.yml", `---
+- name: Verified download
+  ansible.builtin.get_url:
+    url: https://example.com/a.tgz
+    dest: /tmp/a.tgz
+    checksum: "sha256:abc"
+
+- name: Unverified download
+  ansible.builtin.get_url:
+    url: https://example.com/b.tgz
+    dest: /tmp/b.tgz
+`)
+	if !strings.Contains(out, "download-without-checksum") {
+		t.Fatalf("the second get_url has no checksum and must be reported, got:\n%s", out)
+	}
+	if strings.Count(out, "download-without-checksum") != 1 {
+		t.Fatalf("exactly one finding expected (the second task), got:\n%s", out)
+	}
+}
