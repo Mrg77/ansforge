@@ -128,6 +128,15 @@ scanner, never the model's account of its own work.
 `ansforge mcp` serves the deterministic checks over the Model Context Protocol, so
 an assistant can call them directly instead of shelling out and parsing text.
 
+Install the binary first (see above); the server is that binary, there is nothing
+else to fetch. Then, from the repository you want analysed:
+
+```sh
+claude mcp add -s project ansforge -- ansforge mcp
+```
+
+which writes `.mcp.json` at the repository root:
+
 ```json
 {
   "mcpServers": {
@@ -135,6 +144,11 @@ an assistant can call them directly instead of shelling out and parsing text.
   }
 }
 ```
+
+Commit that file and everyone on the repo gets the same tools — provided they
+have installed ansforge too. Claude Code asks for approval the first time it sees a
+`.mcp.json` it has not been shown before, so a cloned repository cannot start a
+process behind your back. Check it with `claude mcp list`, or `/mcp` in session.
 
 Exposed: `ansible_scan, ansible_audit` — read-only, free, and safe to call repeatedly.
 
