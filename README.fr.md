@@ -131,8 +131,17 @@ voit un `.mcp.json` qu'on ne lui a pas encore montré : un dépôt cloné ne peu
 pas lancer un processus dans ton dos. Vérifie avec `claude mcp list`, ou `/mcp`
 en session.
 
-Exposé : `ansible_scan, ansible_audit` — lecture seule, gratuit, sans effet de bord même appelé
-en boucle.
+Deux outils sont exposés, tous deux en lecture seule, gratuits et sans effet de
+bord même appelés en boucle :
+
+| Outil | Argument | Ce qu'il couvre |
+|---|---|---|
+| `ansible_scan` | `path` (optionnel) — relatif à la racine | **Ce chemin seulement.** |
+| `ansible_audit` | `path` (optionnel) | **Tout l'arbre**, pire finding d'abord, avec un total et une sévérité max. |
+
+`ansible_audit` répond à « qu'est-ce qui ne va pas dans ce dépôt » ; `ansible_scan`
+quand un chemin précis est en question. Les deux prennent par défaut la racine
+passée au serveur.
 
 **Non exposé : `fix`, l'agent, tout ce qui écrit.** Un serveur MCP est piloté par un modèle,
 le plus souvent sans qu'un humain approuve chaque appel. Exposer un outil qui
